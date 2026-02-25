@@ -1,0 +1,45 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id            String     @id @default(uuid())
+  name          String
+  adminEmail    String     @unique
+  passwordHash  String
+  createdAt     DateTime   @default(now())
+  employees     Employee[]
+  tasks         Task[]
+}
+
+model Employee {
+  id             String       @id @default(uuid())
+  orgId          String
+  organization   Organization @relation(fields: [orgId], references: [id])
+  name           String
+  email          String       @unique
+  passwordHash   String?
+  role           String       // "Admin", "Employee"
+  department     String?
+  skills         String[]     // E.g., ["React", "Node.js"]
+  assignedTasks  Task[]       @relation("AssignedTasks")
+}
+
+model Task {
+  id               String       @id @default(uuid())
+  orgId            String
+  organization     Organization @relation(fields: [orgId], references: [id])
+  assignedTo       String?
+  employee         Employee?    @relation("AssignedTasks", fields: [assignedTo], references: [id])
+  title            String
+  description      String?
+  status           String       @default("Assigned") // "Assigned", "In Progress", "Completed"
+  skillsRequired   String[]
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+}
