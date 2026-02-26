@@ -73,7 +73,10 @@ const Login = () => {
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-1">Password</label>
+                        <div className="flex justify-between items-center mb-1">
+                            <label className="block text-sm font-medium text-slate-300">Password</label>
+                            <a href="#" onClick={(e) => { e.preventDefault(); alert("Forgot password flow goes here!"); }} className="text-xs text-blue-400 hover:text-blue-300 font-medium">Forgot password?</a>
+                        </div>
                         <Input
                             type="password"
                             placeholder="••••••••"

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, CheckSquare, LogOut } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { LayoutDashboard, Users, CheckSquare, LogOut, User as UserIcon } from 'lucide-react';
 
 const Layout = () => {
     const navigate = useNavigate();
@@ -8,6 +9,8 @@ const Layout = () => {
     const orgName = localStorage.getItem('orgId') ? 'Acme Corp' : 'Workspace'; // Normally fetch from profile
 
     const [userRole, setUserRole] = useState('Employee');
+    const [isProfileOpen, setIsProfileOpen] = useState(false);
+    const [userName, setUserName] = useState('');
 
     useEffect(() => {
         const fetchRole = async () => {
@@ -23,6 +26,7 @@ const Layout = () => {
                 const data = await res.json();
                 const role = data.profileType || data.role || 'Employee';
                 setUserRole(role);
+                setUserName(data.name || 'Admin');
 
                 // Redirect employees away from dashboard to their profile
                 if (role !== 'Admin' && location.pathname === '/dashboard') {
@@ -103,10 +107,50 @@ const Layout = () => {
                     <h2 className="text-lg font-semibold text-slate-800 capitalize">
                         {location.pathname.split('/')[1] || 'Dashboard'}
                     </h2>
-                    <div className="flex items-center">
-                        <div className="w-8 h-8 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-sm">
-                            AD
-                        </div>
+                    <div className="flex items-center relative z-50">
+                        <button
+                            onClick={() => setIsProfileOpen(!isProfileOpen)}
+                            className="w-8 h-8 rounded-full bg-slate-200 hover:bg-slate-300 transition-colors text-slate-600 flex items-center justify-center font-bold text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                        >
+                            {userName ? userName.substring(0, 2).toUpperCase() : 'AD'}
+                        </button>
+
+                        <AnimatePresence>
+                            {isProfileOpen && (
+                                <>
+                                    <div className="fixed inset-0 z-40" onClick={() => setIsProfileOpen(false)}></div>
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                        className="absolute right-0 top-12 w-48 bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden z-50 flex flex-col py-1"
+                                    >
+                                        <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/50">
+                                            <p className="text-sm font-semibold text-slate-800 truncate">{userName}</p>
+                                            <p className="text-xs text-slate-500 truncate">{userRole}</p>
+                                        </div>
+
+                                        {userRole === 'Employee' && (
+                                            <button
+                                                onClick={() => { setIsProfileOpen(false); navigate('/profile'); }}
+                                                className="flex items-center w-full px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                                            >
+                                                <UserIcon className="w-4 h-4 mr-3 text-slate-400" />
+                                                My Profile
+                                            </button>
+                                        )}
+
+                                        <button
+                                            onClick={handleLogout}
+                                            className="flex items-center w-full px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors mt-1 border-t border-slate-100"
+                                        >
+                                            <LogOut className="w-4 h-4 mr-3 text-red-400" />
+                                            Sign out
+                                        </button>
+                                    </motion.div>
+                                </>
+                            )}
+                        </AnimatePresence>
                     </div>
                 </header>
 

@@ -4,6 +4,7 @@ import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Employees from './pages/Employees';
 import Profile from './pages/Profile';
+import EmployeeProfile from './pages/EmployeeProfile';
 import Tasks from './pages/Tasks';
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -26,6 +27,7 @@ function App() {
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="employees" element={<Employees />} />
+          <Route path="employees/:id" element={<EmployeeProfile />} />
           <Route path="profile" element={<Profile />} />
           <Route path="tasks" element={<Tasks />} />
         </Route>

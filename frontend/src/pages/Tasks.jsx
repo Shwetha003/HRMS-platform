@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, X, BrainCircuit, CheckCircle2, Clock, PlayCircle } from 'lucide-react';
+import { Plus, X, BrainCircuit, CheckCircle2, Clock, PlayCircle, Link2 } from 'lucide-react';
+import { ethers } from 'ethers';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import api from '../lib/api';
@@ -9,7 +10,8 @@ const Tasks = () => {
     const [tasks, setTasks] = useState([]);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [newTask, setNewTask] = useState({ title: '', description: '', skillsRequired: '' });
+    const [newTask, setNewTask] = useState({ title: '', description: '', skillsRequired: '', dueDate: '' });
+    const [txLoadingId, setTxLoadingId] = useState(null);
 
     const [userRole, setUserRole] = useState('Employee');
 
@@ -45,9 +47,37 @@ const Tasks = () => {
 
     const handleUpdateStatus = async (id, status) => {
         try {
-            await api.put(`/tasks/${id}`, { status });
+            let txHash = null;
+
+            // If completing a task and wallet is available, log it on-chain
+            if (status === 'Completed' && window.ethereum) {
+                setTxLoadingId(id);
+                try {
+                    const provider = new ethers.BrowserProvider(window.ethereum);
+                    const signer = await provider.getSigner();
+
+                    // The standard Hardhat localhost Node #1 contract address, or use env
+                    const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+                    const abi = ["function logTaskCompletion(string memory taskDbId) external"];
+
+                    const contract = new ethers.Contract(CONTRACT_ADDRESS, abi, signer);
+                    const tx = await contract.logTaskCompletion(id);
+                    txHash = tx.hash;
+
+                    // Wait for 1 confirmation
+                    await tx.wait();
+                } catch (err) {
+                    console.error("Web3 Error: ", err);
+                    alert("On-chain logging skipped or failed. Saving database completion only.");
+                } finally {
+                    setTxLoadingId(null);
+                }
+            }
+
+            await api.put(`/tasks/${id}/status`, { status, txHash });
             fetchTasks();
         } catch (error) {
+            setTxLoadingId(null);
             alert('Failed to update status');
         }
     };
@@ -61,7 +91,10 @@ const Tasks = () => {
 
         try {
             const skillsArray = newTask.skillsRequired.split(',').map(s => s.trim()).filter(s => s);
-            const res = await api.post('/ai/recommend-assignee', { skillsRequired: skillsArray });
+            const res = await api.post('/ai/recommend-assignee', {
+                skillsRequired: skillsArray,
+                dueDate: newTask.dueDate
+            });
             setAiRecommendations(res.data.recommendations);
 
             if (res.data.recommendations.length > 0) {
@@ -86,7 +119,7 @@ const Tasks = () => {
                 assignedTo: selectedAssignee
             });
             setIsModalOpen(false);
-            setNewTask({ title: '', description: '', skillsRequired: '' });
+            setNewTask({ title: '', description: '', skillsRequired: '', dueDate: '' });
             setAiRecommendations([]);
             setSelectedAssignee('');
             fetchTasks();
@@ -163,6 +196,15 @@ const Tasks = () => {
                                             ))}
                                         </div>
 
+                                        {task.txHash && (
+                                            <div className="mb-4">
+                                                <a href={`https://amoy.polygonscan.com/tx/${task.txHash}`} target="_blank" rel="noreferrer" className="inline-flex items-center text-[10px] font-mono text-purple-600 bg-purple-50 px-2 py-1 rounded border border-purple-100 hover:bg-purple-100 transition-colors">
+                                                    <Link2 className="w-3 h-3 mr-1" />
+                                                    {task.txHash.slice(0, 8)}...{task.txHash.slice(-6)}
+                                                </a>
+                                            </div>
+                                        )}
+
                                         <div className="flex items-center justify-between mt-auto pt-3 border-t border-slate-200/60">
                                             <div className="flex items-center text-xs font-medium text-slate-600">
                                                 {getStatusIcon(task.status)}
@@ -171,10 +213,12 @@ const Tasks = () => {
 
                                             <div className="flex space-x-1">
                                                 {task.status === 'Assigned' && (
-                                                    <button onClick={() => handleUpdateStatus(task.id, 'In Progress')} className="text-xs px-2 py-1 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded font-medium transition-colors">Start</button>
+                                                    <button onClick={() => handleUpdateStatus(task.id, 'In Progress')} disabled={txLoadingId === task.id} className="text-xs px-2 py-1 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded font-medium transition-colors disabled:opacity-50">Start</button>
                                                 )}
                                                 {task.status === 'In Progress' && (
-                                                    <button onClick={() => handleUpdateStatus(task.id, 'Completed')} className="text-xs px-2 py-1 bg-purple-100 text-purple-700 hover:bg-purple-200 rounded font-medium transition-colors">Complete</button>
+                                                    <button onClick={() => handleUpdateStatus(task.id, 'Completed')} disabled={txLoadingId === task.id} className="text-xs px-2 py-1 bg-purple-100 text-purple-700 hover:bg-purple-200 rounded font-medium transition-colors disabled:opacity-50">
+                                                        {txLoadingId === task.id ? 'Signing...' : 'Complete'}
+                                                    </button>
                                                 )}
                                             </div>
                                         </div>
@@ -238,6 +282,12 @@ const Tasks = () => {
                                         <label className="block text-sm font-medium text-slate-700 mb-1">Skills Required (comma separated)</label>
                                         <div className="flex space-x-2">
                                             <Input required value={newTask.skillsRequired} onChange={e => setNewTask({ ...newTask, skillsRequired: e.target.value })} placeholder="Docker, Kubernetes, AWS" />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-slate-700 mb-1">Due Date (Optional)</label>
+                                        <div className="flex space-x-2">
+                                            <Input type="date" value={newTask.dueDate} min={new Date().toISOString().split('T')[0]} onChange={e => setNewTask({ ...newTask, dueDate: e.target.value })} />
                                             <Button type="button" onClick={handleGetAiRecommendations} disabled={isAiLoading || !newTask.skillsRequired} className="bg-slate-900 text-white hover:bg-slate-800 shrink-0">
                                                 {isAiLoading ? 'Analyzing...' : 'Get AI Matches'}
                                             </Button>
@@ -268,7 +318,9 @@ const Tasks = () => {
                                                         </div>
                                                         <div>
                                                             <p className="font-semibold text-slate-900 text-sm">{emp.name}</p>
-                                                            <p className="text-xs text-slate-500">{emp.department} • {emp.activeTasksCount} active tasks</p>
+                                                            <p className="text-[10px] text-slate-500 mt-0.5 max-w-[200px] leading-tight">
+                                                                <span className="font-medium">Active Tasks:</span> {emp.metrics?.activeTasksCount} | <span className="font-medium">Avg Velocity:</span> {emp.metrics?.velocityHours}h | <span className="font-medium">Reliability:</span> {emp.metrics?.reliability}
+                                                            </p>
                                                         </div>
                                                     </div>
                                                     <div className="text-right">

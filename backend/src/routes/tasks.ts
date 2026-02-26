@@ -25,7 +25,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response): Prom
 router.post('/', authenticateToken, requireAdmin, async (req: AuthRequest, res: Response): Promise<any> => {
     try {
         const orgId = req.user!.orgId;
-        const { title, description, skillsRequired, assignedTo } = req.body;
+        const { title, description, skillsRequired, assignedTo, dueDate } = req.body;
 
         const task = await prisma.task.create({
             data: {
@@ -33,7 +33,8 @@ router.post('/', authenticateToken, requireAdmin, async (req: AuthRequest, res: 
                 title,
                 description,
                 skillsRequired: skillsRequired || [],
-                assignedTo
+                assignedTo,
+                dueDate: dueDate ? new Date(dueDate) : null
             }
         });
 
@@ -43,10 +44,52 @@ router.post('/', authenticateToken, requireAdmin, async (req: AuthRequest, res: 
     }
 });
 
-// PUT update a task (Admin can update anything, Employee can only update status if assigned)
-router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response): Promise<any> => {
+// PUT update task status (Employee/Admin)
+router.put('/:id/status', authenticateToken, async (req: AuthRequest, res: Response): Promise<any> => {
     try {
-        const { orgId, role, employeeId } = req.user!;
+        const orgId = req.user!.orgId;
+        const employeeId = req.user!.employeeId;
+        const role = req.user!.role;
+        const id = req.params.id as string;
+        const { status, txHash } = req.body;
+
+        const task = await prisma.task.findUnique({ where: { id } });
+        if (!task || task.orgId !== orgId) {
+            return res.status(404).json({ error: 'Task not found' });
+        }
+
+        // Only assigned employee or Admin can update status
+        if (role !== 'Admin' && task.assignedTo !== employeeId) {
+            return res.status(403).json({ error: 'Not authorized to update this task' });
+        }
+
+        const dataToUpdate: any = { status };
+        if (txHash) {
+            dataToUpdate.txHash = txHash;
+        }
+
+        // Logic for tracking time explicitly
+        if (status === 'In Progress' && task.status !== 'In Progress') {
+            dataToUpdate.startedAt = new Date();
+        } else if (status === 'Completed' && task.status !== 'Completed') {
+            dataToUpdate.completedAt = new Date();
+        }
+
+        const updatedTask = await prisma.task.update({
+            where: { id },
+            data: dataToUpdate
+        });
+
+        res.json(updatedTask);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to update task status' });
+    }
+});
+
+// PUT update a task (Admin can update anything)
+router.put('/:id', authenticateToken, requireAdmin, async (req: AuthRequest, res: Response): Promise<any> => {
+    try {
+        const { orgId } = req.user!;
         const id = req.params.id as string;
         const { title, description, skillsRequired, status, assignedTo } = req.body;
 
@@ -54,18 +97,6 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res: Response): P
 
         if (!existingTask || existingTask.orgId !== orgId) {
             return res.status(404).json({ error: 'Task not found' });
-        }
-
-        if (role === 'Employee') {
-            if (existingTask.assignedTo !== employeeId) {
-                return res.status(403).json({ error: 'Cannot update unassigned task' });
-            }
-            // Employee only updates status
-            const updated = await prisma.task.update({
-                where: { id },
-                data: { status }
-            });
-            return res.json(updated);
         }
 
         // Admin updates everything

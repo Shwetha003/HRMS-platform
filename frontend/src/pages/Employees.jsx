@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Search, MoreVertical, X } from 'lucide-react';
 import { Button } from '../components/ui/Button';
@@ -6,11 +7,13 @@ import { Input } from '../components/ui/Input';
 import api from '../lib/api';
 
 const Employees = () => {
+    const navigate = useNavigate();
     const [employees, setEmployees] = useState([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [newEmp, setNewEmp] = useState({ name: '', email: '', department: '', role: 'Employee', skills: '' });
+    const [openActionId, setOpenActionId] = useState(null);
 
     const [userRole, setUserRole] = useState('Employee');
 
@@ -49,6 +52,17 @@ const Employees = () => {
             fetchEmployees();
         } catch (error) {
             alert(error.response?.data?.error || 'Failed to add employee');
+        }
+    };
+
+    const handleDeleteEmployee = async (id) => {
+        if (!window.confirm("Are you sure you want to remove this employee from the organization?")) return;
+        try {
+            await api.delete(`/employees/${id}`);
+            setOpenActionId(null);
+            fetchEmployees();
+        } catch (error) {
+            alert('Failed to delete employee');
         }
     };
 
@@ -93,6 +107,7 @@ const Employees = () => {
                                 <th className="px-6 py-4 font-medium">Department</th>
                                 <th className="px-6 py-4 font-medium">Role</th>
                                 <th className="px-6 py-4 font-medium">Skills</th>
+                                <th className="px-6 py-4 font-medium">Productivity</th>
                                 <th className="px-6 py-4 font-medium text-right">Actions</th>
                             </tr>
                         </thead>
@@ -133,10 +148,64 @@ const Employees = () => {
                                                 {emp.skills?.length > 3 && <span className="text-xs text-slate-400">+{emp.skills.length - 3}</span>}
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <button className="text-slate-400 hover:text-blue-600 p-1 rounded-md hover:bg-blue-50 transition-colors">
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center">
+                                                {emp.productivityScore !== null ? (
+                                                    <>
+                                                        <div className="w-16 h-1.5 bg-slate-200 rounded-full mr-2 overflow-hidden">
+                                                            <div
+                                                                className={`h-full rounded-full ${emp.productivityScore >= 80 ? 'bg-emerald-500' : emp.productivityScore >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}
+                                                                style={{ width: `${emp.productivityScore}%` }}
+                                                            ></div>
+                                                        </div>
+                                                        <span className="font-semibold text-slate-700">{emp.productivityScore}</span>
+                                                    </>
+                                                ) : (
+                                                    <span className="text-xs text-slate-400 italic">No tasks yet</span>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-right relative">
+                                            <button
+                                                onClick={() => setOpenActionId(openActionId === emp.id ? null : emp.id)}
+                                                className="text-slate-400 hover:text-blue-600 p-1 rounded-md hover:bg-blue-50 transition-colors"
+                                            >
                                                 <MoreVertical className="w-5 h-5" />
                                             </button>
+
+                                            <AnimatePresence>
+                                                {openActionId === emp.id && (
+                                                    <>
+                                                        {/* Invisible overlay to catch clicks outside */}
+                                                        <div
+                                                            className="fixed inset-0 z-10"
+                                                            onClick={() => setOpenActionId(null)}
+                                                        ></div>
+                                                        <motion.div
+                                                            initial={{ opacity: 0, scale: 0.95, right: 30 }}
+                                                            animate={{ opacity: 1, scale: 1, right: 40 }}
+                                                            exit={{ opacity: 0, scale: 0.95, right: 30 }}
+                                                            className="absolute top-10 right-10 z-20 w-36 bg-white rounded-lg shadow-lg border border-slate-200 py-1 overflow-hidden"
+                                                        >
+                                                            <button
+                                                                onClick={() => {
+                                                                    setOpenActionId(null);
+                                                                    navigate(`/employees/${emp.id}`);
+                                                                }}
+                                                                className="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                                                            >
+                                                                Edit Profile
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDeleteEmployee(emp.id)}
+                                                                className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                                                            >
+                                                                Remove
+                                                            </button>
+                                                        </motion.div>
+                                                    </>
+                                                )}
+                                            </AnimatePresence>
                                         </td>
                                     </motion.tr>
                                 ))
